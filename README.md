@@ -142,23 +142,24 @@ git pull --ff-only
 docker compose up -d --build
 ```
 
-维护者同步 CLIProxyAPI 上游时，应保留两个远端：
+维护者可用一个命令同步 CLIProxyAPI 与 CPA Usage Keeper 上游：
 
 ```bash
-git remote add upstream https://github.com/router-for-me/CLIProxyAPI.git
-git fetch upstream --tags
-git merge upstream/main
+./scripts/update-upstreams.sh
 ```
 
-合并冲突时不要直接覆盖 `keeper/`、`internal/usagekeeper/`、管理后台注入逻辑和供应商备注逻辑；完成后运行测试并重新构建。
+脚本要求从干净的 `main` 分支运行。它会自动配置两个上游远端、创建临时同步分支、依次合并 CPA 和 Keeper、运行完整测试与 Docker 构建，并仅在全部成功后推送 `origin/main`。出现冲突或验证失败时会停止，不会推送远端。
 
 ## 验证
 
 ```bash
 go test ./...
+(cd keeper && go test ./...)
+npm --prefix keeper/web run lint
 npm --prefix keeper/web run test
 npm --prefix keeper/web run typecheck
 npm --prefix keeper/web run build
+docker compose build cli-proxy-api
 ```
 
 ## 安全建议
