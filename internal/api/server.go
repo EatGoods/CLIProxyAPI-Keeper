@@ -103,6 +103,7 @@ type Server struct {
 
 	exampleAPIKeySafeModeEnabled bool
 	exampleAPIKeySafeModeActive  atomic.Bool
+	usageKeeperSessionHandler    gin.HandlerFunc
 }
 
 // NewServer creates and initializes a new API server instance.
@@ -182,6 +183,7 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		pluginHost:          optionState.pluginHost,
 
 		exampleAPIKeySafeModeEnabled: optionState.exampleAPIKeySafeMode,
+		usageKeeperSessionHandler:    optionState.usageKeeperSession,
 	}
 	s.wsAuthEnabled.Store(cfg.WebsocketAuth)
 	s.exampleAPIKeySafeModeActive.Store(s.exampleAPIKeySafeModeRequired(cfg))

@@ -132,11 +132,20 @@ CLIProxyAPI 用户手册： [https://help.router-for.me/](https://help.router-fo
 
 ## 使用量统计
 
-自v6.10.0版本以后，CLIProxyAPI及 [CPAMC](https://github.com/router-for-me/Cli-Proxy-API-Management-Center) 项目不再预置数据统计功能，如果有数据统计需求的请使用以下项目：
+CPA Usage Keeper 可以直接运行在 CLIProxyAPI 进程内，通过 SQLite 持久化直接接收的 usage 数据。启用配置：
+
+```yaml
+usage-keeper:
+  enabled: true
+  base-path: "/usage"
+  data-dir: "./usage-keeper"
+```
+
+访问 `/management.html#/usage`，使用原有 CPA 管理密钥登录即可。嵌入模式与 CPA 共用 HTTP 服务、管理认证和生命周期，不再轮询 CPA usage queue。直接访问 `/usage` 会跳转到集成后的管理页。修改 `usage-keeper` 配置后需要重启。
 
 ### [CPA Usage Keeper](https://github.com/Willxup/cpa-usage-keeper)
 
-独立的 CLIProxyAPI 使用量持久化与可视化服务，定期同步 CLIProxyAPI 数据，存储到 SQLite，提供聚合 API，并内置使用量分析与统计仪表盘。
+如需独立进程部署，仍可使用上游 standalone 项目。
 
 ### [CPA-Manager-Plus](https://github.com/seakee/CPA-Manager-Plus)
 

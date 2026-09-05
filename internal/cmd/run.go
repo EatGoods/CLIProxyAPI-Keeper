@@ -13,6 +13,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/api"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/pluginhost"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/usagekeeper"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
 	log "github.com/sirupsen/logrus"
 )
@@ -31,6 +32,20 @@ func StartService(cfg *config.Config, configPath string, localPassword string) {
 
 // StartServiceWithPluginHost builds and runs the proxy service with a shared plugin host.
 func StartServiceWithPluginHost(cfg *config.Config, configPath string, localPassword string, host *pluginhost.Host, serverOptions ...api.ServerOption) {
+	keeperRuntime, errKeeper := usagekeeper.New(cfg, configPath, localPassword)
+	if errKeeper != nil {
+		log.Errorf("failed to initialize embedded usage keeper: %v", errKeeper)
+		return
+	}
+	if keeperRuntime != nil {
+		defer func() {
+			if errClose := keeperRuntime.Close(); errClose != nil {
+				log.Errorf("embedded usage keeper shutdown failed: %v", errClose)
+			}
+		}()
+		serverOptions = append(serverOptions, keeperRuntime.ServerOptions()...)
+	}
+
 	builder := cliproxy.NewBuilder().
 		WithConfig(cfg).
 		WithConfigPath(configPath).
@@ -44,6 +59,11 @@ func StartServiceWithPluginHost(cfg *config.Config, configPath string, localPass
 
 	ctxSignal, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+	if keeperRuntime != nil {
+		builder = builder.WithHooks(cliproxy.Hooks{OnAfterStart: func(*cliproxy.Service) {
+			keeperRuntime.Start(ctxSignal)
+		}})
+	}
 
 	runCtx := ctxSignal
 	if localPassword != "" {
@@ -75,6 +95,17 @@ func StartServiceBackground(cfg *config.Config, configPath string, localPassword
 
 // StartServiceBackgroundWithPluginHost starts the proxy service with a shared plugin host.
 func StartServiceBackgroundWithPluginHost(cfg *config.Config, configPath string, localPassword string, host *pluginhost.Host, serverOptions ...api.ServerOption) (cancel func(), done <-chan struct{}) {
+	keeperRuntime, errKeeper := usagekeeper.New(cfg, configPath, localPassword)
+	if errKeeper != nil {
+		log.Errorf("failed to initialize embedded usage keeper: %v", errKeeper)
+		doneCh := make(chan struct{})
+		close(doneCh)
+		return func() {}, doneCh
+	}
+	if keeperRuntime != nil {
+		serverOptions = append(serverOptions, keeperRuntime.ServerOptions()...)
+	}
+
 	builder := cliproxy.NewBuilder().
 		WithConfig(cfg).
 		WithConfigPath(configPath).
@@ -88,16 +119,33 @@ func StartServiceBackgroundWithPluginHost(cfg *config.Config, configPath string,
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	doneCh := make(chan struct{})
+	if keeperRuntime != nil {
+		builder = builder.WithHooks(cliproxy.Hooks{OnAfterStart: func(*cliproxy.Service) {
+			keeperRuntime.Start(ctx)
+		}})
+	}
 
 	service, err := builder.Build()
 	if err != nil {
 		log.Errorf("failed to build proxy service: %v", err)
+		if keeperRuntime != nil {
+			if errClose := keeperRuntime.Close(); errClose != nil {
+				log.Errorf("embedded usage keeper shutdown failed: %v", errClose)
+			}
+		}
 		close(doneCh)
 		return cancelFn, doneCh
 	}
 
 	go func() {
 		defer close(doneCh)
+		if keeperRuntime != nil {
+			defer func() {
+				if errClose := keeperRuntime.Close(); errClose != nil {
+					log.Errorf("embedded usage keeper shutdown failed: %v", errClose)
+				}
+			}()
+		}
 		if err := service.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			log.Errorf("proxy service exited with error: %v", err)
 		}

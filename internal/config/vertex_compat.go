@@ -17,6 +17,9 @@ type VertexCompatKey struct {
 	// Maps to the x-goog-api-key header.
 	APIKey string `yaml:"api-key" json:"api-key"`
 
+	// Note is an optional operator-facing label and does not affect routing.
+	Note string `yaml:"note,omitempty" json:"note,omitempty"`
+
 	// Priority controls selection preference when multiple credentials match.
 	// Higher values are preferred; defaults to 0.
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
@@ -97,6 +100,7 @@ func (cfg *Config) SanitizeVertexCompatKeys() {
 	out := cfg.VertexCompatAPIKey[:0]
 	for i := range cfg.VertexCompatAPIKey {
 		entry := cfg.VertexCompatAPIKey[i]
+		entry.Note = strings.TrimSpace(entry.Note)
 		entry.APIKey = strings.TrimSpace(entry.APIKey)
 		if entry.APIKey == "" {
 			continue

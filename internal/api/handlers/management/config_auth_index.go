@@ -10,36 +10,44 @@ import (
 
 type geminiKeyWithAuthIndex struct {
 	config.GeminiKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex   string `json:"auth-index,omitempty"`
+	ConfigIndex int    `json:"config-index"`
 }
 
 type claudeKeyWithAuthIndex struct {
 	config.ClaudeKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex   string `json:"auth-index,omitempty"`
+	ConfigIndex int    `json:"config-index"`
 }
 
 type codexKeyWithAuthIndex struct {
 	config.CodexKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex   string `json:"auth-index,omitempty"`
+	ConfigIndex int    `json:"config-index"`
 }
 
 type xaiKeyWithAuthIndex struct {
 	config.XAIKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex   string `json:"auth-index,omitempty"`
+	ConfigIndex int    `json:"config-index"`
 }
 
 type vertexCompatKeyWithAuthIndex struct {
 	config.VertexCompatKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex   string `json:"auth-index,omitempty"`
+	ConfigIndex int    `json:"config-index"`
 }
 
 type openAICompatibilityAPIKeyWithAuthIndex struct {
 	config.OpenAICompatibilityAPIKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex   string `json:"auth-index,omitempty"`
+	ConfigIndex int    `json:"config-index"`
 }
 
 type openAICompatibilityWithAuthIndex struct {
 	Name                  string                                   `json:"name"`
+	Note                  string                                   `json:"note,omitempty"`
+	ConfigIndex           int                                      `json:"config-index"`
 	Priority              int                                      `json:"priority,omitempty"`
 	Disabled              bool                                     `json:"disabled"`
 	Prefix                string                                   `json:"prefix,omitempty"`
@@ -112,8 +120,9 @@ func (h *Handler) geminiKeysWithAuthIndex() []geminiKeyWithAuthIndex {
 			authIndex = liveIndexByID[id]
 		}
 		out[i] = geminiKeyWithAuthIndex{
-			GeminiKey: entry,
-			AuthIndex: authIndex,
+			GeminiKey:   entry,
+			AuthIndex:   authIndex,
+			ConfigIndex: i,
 		}
 	}
 	return out
@@ -145,8 +154,9 @@ func (h *Handler) interactionsKeysWithAuthIndex() []geminiKeyWithAuthIndex {
 			authIndex = liveIndexByID[id]
 		}
 		out[i] = geminiKeyWithAuthIndex{
-			GeminiKey: entry,
-			AuthIndex: authIndex,
+			GeminiKey:   entry,
+			AuthIndex:   authIndex,
+			ConfigIndex: i,
 		}
 	}
 	return out
@@ -178,8 +188,9 @@ func (h *Handler) claudeKeysWithAuthIndex() []claudeKeyWithAuthIndex {
 			authIndex = liveIndexByID[id]
 		}
 		out[i] = claudeKeyWithAuthIndex{
-			ClaudeKey: entry,
-			AuthIndex: authIndex,
+			ClaudeKey:   entry,
+			AuthIndex:   authIndex,
+			ConfigIndex: i,
 		}
 	}
 	return out
@@ -211,8 +222,9 @@ func (h *Handler) codexKeysWithAuthIndex() []codexKeyWithAuthIndex {
 			authIndex = liveIndexByID[id]
 		}
 		out[i] = codexKeyWithAuthIndex{
-			CodexKey:  entry,
-			AuthIndex: authIndex,
+			CodexKey:    entry,
+			AuthIndex:   authIndex,
+			ConfigIndex: i,
 		}
 	}
 	return out
@@ -244,8 +256,9 @@ func (h *Handler) xaiKeysWithAuthIndex() []xaiKeyWithAuthIndex {
 			authIndex = liveIndexByID[id]
 		}
 		out[i] = xaiKeyWithAuthIndex{
-			XAIKey:    entry,
-			AuthIndex: authIndex,
+			XAIKey:      entry,
+			AuthIndex:   authIndex,
+			ConfigIndex: i,
 		}
 	}
 	return out
@@ -272,6 +285,7 @@ func (h *Handler) vertexCompatKeysWithAuthIndex() []vertexCompatKeyWithAuthIndex
 		out[i] = vertexCompatKeyWithAuthIndex{
 			VertexCompatKey: entry,
 			AuthIndex:       authIndex,
+			ConfigIndex:     i,
 		}
 	}
 	return out
@@ -302,6 +316,8 @@ func (h *Handler) openAICompatibilityWithAuthIndex() []openAICompatibilityWithAu
 
 		response := openAICompatibilityWithAuthIndex{
 			Name:                  entry.Name,
+			Note:                  entry.Note,
+			ConfigIndex:           i,
 			Priority:              entry.Priority,
 			Disabled:              entry.Disabled,
 			Prefix:                entry.Prefix,
@@ -325,6 +341,7 @@ func (h *Handler) openAICompatibilityWithAuthIndex() []openAICompatibilityWithAu
 				response.APIKeyEntries[j] = openAICompatibilityAPIKeyWithAuthIndex{
 					OpenAICompatibilityAPIKey: apiKeyEntry,
 					AuthIndex:                 liveIndexByID[id],
+					ConfigIndex:               j,
 				}
 			}
 		}

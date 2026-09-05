@@ -24,6 +24,15 @@ func (p *usageQueuePlugin) HandleUsage(ctx context.Context, record coreusage.Rec
 	if !Enabled() || !UsageStatisticsEnabled() {
 		return
 	}
+	payload, err := MarshalUsageRecord(ctx, record)
+	if err != nil {
+		return
+	}
+	Enqueue(payload)
+}
+
+// MarshalUsageRecord returns the canonical usage payload consumed by persistence modules.
+func MarshalUsageRecord(ctx context.Context, record coreusage.Record) ([]byte, error) {
 
 	timestamp := record.RequestedAt
 	if timestamp.IsZero() {
@@ -107,7 +116,7 @@ func (p *usageQueuePlugin) HandleUsage(ctx context.Context, record coreusage.Rec
 		ResponseHeaders: record.ResponseHeaders,
 	}
 
-	payload, err := json.Marshal(queuedUsageDetail{
+	return json.Marshal(queuedUsageDetail{
 		requestDetail:       detail,
 		AccountingVersion:   coreusage.TokenAccountingSchemaVersion,
 		TokenBreakdown:      usageDetail.TokenBreakdown,
@@ -123,10 +132,6 @@ func (p *usageQueuePlugin) HandleUsage(ctx context.Context, record coreusage.Rec
 		ServiceTier:         serviceTier,
 		ResponseServiceTier: responseServiceTier,
 	})
-	if err != nil {
-		return
-	}
-	Enqueue(payload)
 }
 
 type queuedUsageDetail struct {

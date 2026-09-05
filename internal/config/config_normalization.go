@@ -161,6 +161,10 @@ func (cfg *Config) SanitizeOpenAICompatibility() {
 	for i := range cfg.OpenAICompatibility {
 		e := cfg.OpenAICompatibility[i]
 		e.Name = strings.TrimSpace(e.Name)
+		e.Note = strings.TrimSpace(e.Note)
+		for keyIndex := range e.APIKeyEntries {
+			e.APIKeyEntries[keyIndex].Note = strings.TrimSpace(e.APIKeyEntries[keyIndex].Note)
+		}
 		e.Prefix = normalizeModelPrefix(e.Prefix)
 		e.BaseURL = strings.TrimSpace(e.BaseURL)
 		e.Headers = NormalizeHeaders(e.Headers)
@@ -201,6 +205,7 @@ func sanitizeCodexKeyEntries(entries []CodexKey) []CodexKey {
 	out := make([]CodexKey, 0, len(entries))
 	for i := range entries {
 		e := entries[i]
+		e.Note = strings.TrimSpace(e.Note)
 		e.Prefix = normalizeModelPrefix(e.Prefix)
 		e.BaseURL = strings.TrimSpace(e.BaseURL)
 		e.Headers = NormalizeHeaders(e.Headers)
@@ -220,6 +225,7 @@ func (cfg *Config) SanitizeClaudeKeys() {
 	}
 	for i := range cfg.ClaudeKey {
 		entry := &cfg.ClaudeKey[i]
+		entry.Note = strings.TrimSpace(entry.Note)
 		entry.Prefix = normalizeModelPrefix(entry.Prefix)
 		entry.Headers = NormalizeHeaders(entry.Headers)
 		entry.ExcludedModels = NormalizeExcludedModels(entry.ExcludedModels)
@@ -239,6 +245,7 @@ func sanitizeGeminiKeyEntries(entries []GeminiKey) []GeminiKey {
 	out := entries[:0]
 	for i := range entries {
 		entry := entries[i]
+		entry.Note = strings.TrimSpace(entry.Note)
 		entry.APIKey = strings.TrimSpace(entry.APIKey)
 		entry.BaseURL = strings.TrimSpace(entry.BaseURL)
 		if entry.APIKey == "" && entry.BaseURL == "" {

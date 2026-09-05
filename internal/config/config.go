@@ -57,6 +57,9 @@ type Config struct {
 	// UsageStatisticsEnabled toggles in-memory usage aggregation; when false, usage data is discarded.
 	UsageStatisticsEnabled bool `yaml:"usage-statistics-enabled" json:"usage-statistics-enabled"`
 
+	// UsageKeeper configures the embedded persistent usage dashboard.
+	UsageKeeper UsageKeeperConfig `yaml:"usage-keeper" json:"usage-keeper"`
+
 	// RedisUsageQueueRetentionSeconds controls how long usage queue items are retained
 	// in memory for Management API consumers.
 	// Default: 60. Max: 3600.
@@ -171,4 +174,11 @@ type Config struct {
 
 	// Payload defines default and override rules for provider payload parameters.
 	Payload PayloadConfig `yaml:"payload" json:"payload"`
+}
+
+// UsageKeeperConfig controls the embedded CPA Usage Keeper runtime.
+type UsageKeeperConfig struct {
+	Enabled  bool   `yaml:"enabled" json:"enabled"`
+	BasePath string `yaml:"base-path,omitempty" json:"base-path,omitempty"`
+	DataDir  string `yaml:"data-dir,omitempty" json:"data-dir,omitempty"`
 }

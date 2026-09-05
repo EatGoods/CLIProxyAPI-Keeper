@@ -1714,6 +1714,75 @@ func TestHomeEnabledHidesManagementEndpointsAndControlPanel(t *testing.T) {
 	})
 }
 
+func TestInjectManagementUsageKeeper(t *testing.T) {
+	page := []byte(`<html><head><script>startManagement()</script></head><body></body></html>`)
+	got := string(injectManagementUsageKeeper(page, "keeper/"))
+
+	for _, want := range []string{
+		`window.__CPA_USAGE_KEEPER_BASE_PATH__="/keeper"`,
+		`data-cpa-usage-keeper-nav`,
+		"frame.src = `${basePath}/?embed=cpamc`",
+		`/v0/management/usage-keeper/session`,
+		`cpa_usage_keeper_embed_session`,
+		`/v0/management/provider-note`,
+		`data-cpa-provider-note-cell`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("injected management page missing %q", want)
+		}
+	}
+	if strings.Index(got, "data-cpa-usage-keeper-nav") > strings.Index(got, "startManagement()") {
+		t.Fatal("usage keeper integration must load before the management application")
+	}
+}
+
+func TestUsageKeeperSessionRouteUsesManagementAuthentication(t *testing.T) {
+	t.Setenv("MANAGEMENT_PASSWORD", "test-management-key")
+	called := false
+	server := newTestServerWithOptions(t, WithUsageKeeperSessionHandler(func(c *gin.Context) {
+		called = true
+		c.JSON(http.StatusOK, gin.H{"session_token": "keeper-session"})
+	}))
+
+	unauthorized := httptest.NewRecorder()
+	server.engine.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodPost, "/v0/management/usage-keeper/session", nil))
+	if unauthorized.Code == http.StatusOK || called {
+		t.Fatalf("unauthenticated session exchange status = %d, called=%t", unauthorized.Code, called)
+	}
+
+	authorizedRequest := httptest.NewRequest(http.MethodPost, "/v0/management/usage-keeper/session", nil)
+	authorizedRequest.Header.Set("Authorization", "Bearer test-management-key")
+	authorized := httptest.NewRecorder()
+	server.engine.ServeHTTP(authorized, authorizedRequest)
+	if authorized.Code != http.StatusOK || !called {
+		t.Fatalf("authenticated session exchange status = %d, called=%t body=%s", authorized.Code, called, authorized.Body.String())
+	}
+}
+
+func TestManagementUsageKeeperPageIsNotCached(t *testing.T) {
+	staticDir := t.TempDir()
+	t.Setenv("MANAGEMENT_STATIC_PATH", staticDir)
+	if err := os.WriteFile(filepath.Join(staticDir, "management.html"), []byte(`<html><head><script>startManagement()</script></head></html>`), 0o600); err != nil {
+		t.Fatalf("failed to write management asset: %v", err)
+	}
+
+	server := newTestServer(t)
+	server.cfg.UsageKeeper.Enabled = true
+	req := httptest.NewRequest(http.MethodGet, "/management.html", nil)
+	rr := httptest.NewRecorder()
+	server.engine.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if got := rr.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	if !strings.Contains(rr.Body.String(), "data-cpa-usage-keeper-nav") {
+		t.Fatal("management page did not include usage keeper integration")
+	}
+}
+
 func TestExampleAPIKeySafeModeShowsWarningAndKeepsManagement(t *testing.T) {
 	t.Setenv("MANAGEMENT_PASSWORD", "test-management-key")
 	staticDir := t.TempDir()

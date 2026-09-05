@@ -20,6 +20,8 @@ auths
 logs
 conv
 config.yaml
+keeper/data
+keeper/web/node_modules
 
 # Development/editor
 bin

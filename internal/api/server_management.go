@@ -1,7 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
+	"encoding/json"
 	"net/http"
 	"os"
 	"strings"
@@ -10,6 +13,9 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/managementasset"
 	log "github.com/sirupsen/logrus"
 )
+
+//go:embed management_usage_keeper.js
+var managementUsageKeeperScript string
 
 func (s *Server) registerManagementRoutes() {
 	if s == nil || s.engine == nil || s.mgmt == nil {
@@ -27,6 +33,9 @@ func (s *Server) registerManagementRoutes() {
 	mgmt := s.engine.Group("/v0/management")
 	mgmt.Use(s.managementAvailabilityMiddleware(), s.mgmt.Middleware())
 	{
+		if s.usageKeeperSessionHandler != nil {
+			mgmt.POST("/usage-keeper/session", s.usageKeeperSessionHandler)
+		}
 		mgmt.GET("/config", s.mgmt.GetConfig)
 		mgmt.GET("/config.yaml", s.mgmt.GetConfigYAML)
 		mgmt.PUT("/config.yaml", s.mgmt.PutConfigYAML)
@@ -81,6 +90,7 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.PATCH("/api-keys", s.mgmt.PatchAPIKeys)
 		mgmt.DELETE("/api-keys", s.mgmt.DeleteAPIKeys)
 		mgmt.GET("/api-key-usage", s.mgmt.GetAPIKeyUsage)
+		mgmt.PATCH("/provider-note", s.mgmt.PatchProviderNote)
 		mgmt.GET("/usage-queue", s.mgmt.GetUsageQueue)
 
 		mgmt.GET("/gemini-api-key", s.mgmt.GetGeminiKeys)
@@ -316,5 +326,45 @@ func (s *Server) serveManagementControlPanel(c *gin.Context) {
 		}
 	}
 
-	c.File(filePath)
+	if !cfg.UsageKeeper.Enabled {
+		c.File(filePath)
+		return
+	}
+
+	page, err := os.ReadFile(filePath)
+	if err != nil {
+		log.WithError(err).Error("failed to read management control panel asset")
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+	c.Data(http.StatusOK, "text/html; charset=utf-8", injectManagementUsageKeeper(page, cfg.UsageKeeper.BasePath))
+}
+
+func injectManagementUsageKeeper(page []byte, configuredBasePath string) []byte {
+	basePath := strings.TrimRight(strings.TrimSpace(configuredBasePath), "/")
+	if basePath == "" {
+		basePath = "/usage"
+	} else if !strings.HasPrefix(basePath, "/") {
+		basePath = "/" + basePath
+	}
+	encodedBasePath, _ := json.Marshal(basePath)
+	injection := []byte("<script>window.__CPA_USAGE_KEEPER_BASE_PATH__=" + string(encodedBasePath) + ";\n" + managementUsageKeeperScript + "</script>\n")
+
+	lowerPage := bytes.ToLower(page)
+	position := bytes.Index(lowerPage, []byte("<script"))
+	if position < 0 {
+		position = bytes.Index(lowerPage, []byte("</head>"))
+	}
+	if position < 0 {
+		return append(injection, page...)
+	}
+
+	result := make([]byte, 0, len(page)+len(injection))
+	result = append(result, page[:position]...)
+	result = append(result, injection...)
+	result = append(result, page[position:]...)
+	return result
 }

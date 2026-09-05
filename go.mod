@@ -2,6 +2,8 @@ module github.com/router-for-me/CLIProxyAPI/v7
 
 go 1.26.0
 
+require cpa-usage-keeper v0.0.0
+
 require (
 	github.com/andybalholm/brotli v1.0.6
 	github.com/atotto/clipboard v0.1.4
@@ -39,9 +41,14 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+replace cpa-usage-keeper => ./keeper
+
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.5.1 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/mattn/go-sqlite3 v1.14.48 // indirect
 	github.com/pion/datachannel v1.6.2 // indirect
 	github.com/pion/dtls/v3 v3.1.5 // indirect
 	github.com/pion/logging v0.2.4 // indirect
@@ -56,6 +63,9 @@ require (
 	github.com/wlynxg/anet v0.0.5 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
+	gorm.io/driver/sqlite v1.5.7 // indirect
+	gorm.io/gorm v1.26.1 // indirect
+	gorm.io/plugin/dbresolver v1.6.0 // indirect
 )
 
 require (

@@ -1792,11 +1792,13 @@ func normalizeOpenAICompatibilityEntry(entry *config.OpenAICompatibility) {
 	}
 	// Trim base-url; empty base-url indicates provider should be removed by sanitization
 	entry.BaseURL = strings.TrimSpace(entry.BaseURL)
+	entry.Note = strings.TrimSpace(entry.Note)
 	entry.Headers = config.NormalizeHeaders(entry.Headers)
 	existing := make(map[string]struct{}, len(entry.APIKeyEntries))
 	for i := range entry.APIKeyEntries {
 		trimmed := strings.TrimSpace(entry.APIKeyEntries[i].APIKey)
 		entry.APIKeyEntries[i].APIKey = trimmed
+		entry.APIKeyEntries[i].Note = strings.TrimSpace(entry.APIKeyEntries[i].Note)
 		if trimmed != "" {
 			existing[trimmed] = struct{}{}
 		}
@@ -1827,6 +1829,7 @@ func normalizeClaudeKey(entry *config.ClaudeKey) {
 		return
 	}
 	entry.APIKey = strings.TrimSpace(entry.APIKey)
+	entry.Note = strings.TrimSpace(entry.Note)
 	if normalized, ok := config.NormalizeClaudeFingerprintProfile(entry.FingerprintProfile); ok {
 		entry.FingerprintProfile = normalized
 	} else {
@@ -1857,6 +1860,7 @@ func normalizeCodexKey(entry *config.CodexKey) {
 		return
 	}
 	entry.APIKey = strings.TrimSpace(entry.APIKey)
+	entry.Note = strings.TrimSpace(entry.Note)
 	entry.Prefix = strings.TrimSpace(entry.Prefix)
 	entry.BaseURL = strings.TrimSpace(entry.BaseURL)
 	entry.ProxyURL = strings.TrimSpace(entry.ProxyURL)
@@ -1883,6 +1887,7 @@ func normalizeVertexCompatKey(entry *config.VertexCompatKey) {
 		return
 	}
 	entry.APIKey = strings.TrimSpace(entry.APIKey)
+	entry.Note = strings.TrimSpace(entry.Note)
 	entry.Prefix = strings.TrimSpace(entry.Prefix)
 	entry.BaseURL = strings.TrimSpace(entry.BaseURL)
 	entry.ProxyURL = strings.TrimSpace(entry.ProxyURL)

@@ -27,6 +27,7 @@ type serverOptionConfig struct {
 	pluginHost            *pluginhost.Host
 	configReloadHook      func(context.Context, *config.Config)
 	exampleAPIKeySafeMode bool
+	usageKeeperSession    gin.HandlerFunc
 }
 
 // ServerOption customises HTTP server construction.
@@ -131,5 +132,12 @@ func WithConfigReloadHook(hook func(context.Context, *config.Config)) ServerOpti
 func WithExampleAPIKeySafeMode() ServerOption {
 	return func(cfg *serverOptionConfig) {
 		cfg.exampleAPIKeySafeMode = true
+	}
+}
+
+// WithUsageKeeperSessionHandler registers the embedded Keeper session exchange endpoint.
+func WithUsageKeeperSessionHandler(handler gin.HandlerFunc) ServerOption {
+	return func(cfg *serverOptionConfig) {
+		cfg.usageKeeperSession = handler
 	}
 }
