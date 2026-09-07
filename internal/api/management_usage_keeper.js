@@ -9,6 +9,7 @@
     'xai-api-key', 'vertex-api-key', 'openai-compatibility',
   ]);
   const providerRecords = new Map();
+  const cpaAPIKeyRecords = [];
   let pendingInitialUsage = window.location.hash === route;
   let usageVisible = false;
   let managementCredential;
@@ -56,6 +57,7 @@
     }).then((payload) => {
       keeperSessionToken = String(payload.session_token || '');
       activateFrameSession();
+      void loadCPAAPIKeys();
     }).catch(() => {
       keeperSessionToken = '';
     }).finally(() => {
@@ -69,6 +71,7 @@
     if (managementCredential?.name === next.name && managementCredential.value === next.value) return;
     managementCredential = next;
     keeperSessionToken = '';
+    cpaAPIKeyRecords.length = 0;
     sessionExchange = undefined;
     void exchangeKeeperSession();
   };
@@ -138,11 +141,38 @@
   };
 
   const nativeFetch = window.fetch.bind(window);
+  let apiKeySettingsRequest;
+  const loadCPAAPIKeys = () => {
+    if (!keeperSessionToken || apiKeySettingsRequest) return apiKeySettingsRequest;
+    apiKeySettingsRequest = nativeFetch(`${basePath}/api/v1/usage/api-keys/settings`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: {
+        'X-CPA-Usage-Keeper-Embed': 'cpamc',
+        'X-CPA-Usage-Keeper-Embed-Session': keeperSessionToken,
+        'X-CPA-Usage-Keeper-Request': 'fetch',
+      },
+    }).then((response) => {
+      if (!response.ok) throw new Error(`Could not load API key aliases: ${response.status}`);
+      return response.json();
+    }).then((payload) => {
+      cpaAPIKeyRecords.splice(0, cpaAPIKeyRecords.length, ...(Array.isArray(payload.items) ? payload.items : []));
+      queueMicrotask(ensureCPAAPIKeyAliases);
+    }).catch(() => {
+      cpaAPIKeyRecords.length = 0;
+    }).finally(() => {
+      apiKeySettingsRequest = undefined;
+    });
+    return apiKeySettingsRequest;
+  };
+
   window.fetch = async (input, init) => {
     const response = await nativeFetch(input, init);
     const url = input instanceof Request ? input.url : String(input);
     if (response.ok && url.includes('/v0/management/')) {
-      const credential = managementCredentialFromHeaders(new Headers(input instanceof Request ? input.headers : init?.headers));
+      const headers = new Headers(input instanceof Request ? input.headers : undefined);
+      new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+      const credential = managementCredentialFromHeaders(headers);
       if (credential) rememberManagementCredential(...credential);
     }
     if (response.ok && url.includes('/v0/management/')) {
@@ -319,6 +349,105 @@
   };
 
   const maskedKey = (key) => key ? `${key.slice(0, 2)}******${key.slice(-2)}` : '';
+  const findCPAAPIKeyRecord = (row) => {
+    const existingID = row.dataset.cpaApiKeyId;
+    const existing = existingID && cpaAPIKeyRecords.find((item) => String(item.id) === existingID);
+    if (existing) return existing;
+    const displayKey = row.querySelector('.item-subtitle')?.textContent?.trim() || '';
+    const record = cpaAPIKeyRecords.find((item) => item.displayKey === displayKey || maskedKey(item.apiKey) === displayKey);
+    if (record) row.dataset.cpaApiKeyId = String(record.id);
+    return record;
+  };
+
+  const saveCPAAPIKeyAlias = async (record, keyAlias) => {
+    const response = await nativeFetch(`${basePath}/api/v1/usage/api-keys/${encodeURIComponent(record.id)}`, {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CPA-Usage-Keeper-Embed': 'cpamc',
+        'X-CPA-Usage-Keeper-Embed-Session': keeperSessionToken,
+        'X-CPA-Usage-Keeper-Request': 'fetch',
+      },
+      body: JSON.stringify({ keyAlias }),
+    });
+    if (!response.ok) throw new Error(`Could not save API key alias: ${response.status}`);
+    Object.assign(record, await response.json());
+  };
+
+  const editCPAAPIKeyAlias = (pill) => {
+    const record = cpaAPIKeyRecords.find((item) => String(item.id) === pill.closest('.item-row')?.dataset.cpaApiKeyId);
+    if (!record || pill.dataset.saving === 'true' || pill.dataset.editing === 'true') return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 128;
+    input.value = record.keyAlias || '';
+    input.className = 'cpa-api-key-alias-input';
+    input.setAttribute('aria-label', noteLabels().header);
+    pill.dataset.editing = 'true';
+    pill.replaceChildren(input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = async (save) => {
+      if (finished) return;
+      finished = true;
+      if (save) {
+        const keyAlias = input.value.trim();
+        if ([...keyAlias].length > 128 || /[\r\n]/.test(keyAlias)) {
+          finished = false;
+          window.alert(noteLabels().prompt.replace('200', '128'));
+          input.focus();
+          return;
+        }
+        pill.dataset.saving = 'true';
+        try {
+          await saveCPAAPIKeyAlias(record, keyAlias);
+          frame?.contentWindow.location.reload();
+        } catch (error) {
+          finished = false;
+          window.alert(error instanceof Error ? error.message : String(error));
+          input.focus();
+          return;
+        } finally {
+          pill.dataset.saving = 'false';
+        }
+      }
+      pill.dataset.editing = 'false';
+      ensureCPAAPIKeyAliases();
+    };
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        void finish(true);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        void finish(false);
+      }
+    });
+    input.addEventListener('blur', () => void finish(true));
+  };
+
+  function ensureCPAAPIKeyAliases() {
+    document.querySelectorAll('main .item-row').forEach((row) => {
+      const record = findCPAAPIKeyRecord(row);
+      const pill = record && row.querySelector('.item-meta > .pill');
+      if (!pill) return;
+      if (!pill.dataset.cpaApiKeyFallback) pill.dataset.cpaApiKeyFallback = pill.textContent?.trim() || '';
+      pill.dataset.cpaApiKeyAlias = '';
+      pill.title = noteLabels().edit;
+      if (!pill.dataset.cpaApiKeyAliasBound) {
+        pill.dataset.cpaApiKeyAliasBound = 'true';
+        pill.addEventListener('dblclick', () => editCPAAPIKeyAlias(pill));
+      }
+      if (pill.dataset.editing === 'true') return;
+      const label = record.keyAlias || pill.dataset.cpaApiKeyFallback;
+      if (pill.textContent !== label) pill.textContent = label;
+    });
+  }
+
   const normalizedURL = (value) => String(value || '').trim().replace(/\/$/, '');
   const findProviderRecord = (row) => {
     const key = row.cells[0]?.textContent?.trim() || '';
@@ -423,6 +552,9 @@
       .cpa-provider-note-button[data-empty="true"] { color:var(--text-tertiary); border-style:dashed; }
       .cpa-provider-note-button:hover { border-color:var(--primary-color); }
       .cpa-provider-note-button:disabled { opacity:.6; cursor:wait; }
+      [data-cpa-api-key-alias] { cursor:text; }
+      [data-cpa-api-key-alias][data-saving="true"] { opacity:.6; cursor:wait; }
+      .cpa-api-key-alias-input { width:100%; min-width:100px; padding:0; border:0; outline:0; color:inherit; background:transparent; font:inherit; }
     `;
     document.head.append(style);
   };
@@ -460,6 +592,7 @@
     ensureNav();
     ensureProviderNoteStyles();
     ensureProviderNotes();
+    ensureCPAAPIKeyAliases();
     if (location.hash === route || pendingInitialUsage) showUsage(false);
   };
   const observer = new MutationObserver(sync);

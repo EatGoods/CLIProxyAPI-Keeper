@@ -6,8 +6,8 @@ import { ApiKeySettingsCard, copyApiKeyToClipboard, getApiKeySettingsVisibleKey 
 import type { CpaApiKeySettingsItem } from '@/lib/types';
 
 const apiKeys: CpaApiKeySettingsItem[] = [
-  { id: '9007199254740993', apiKey: 'sk-alpha123456', keyAlias: 'Primary', displayKey: 'sk-*********123456', label: 'Primary', lastSyncedAt: '2026-05-13T00:00:00Z' },
-  { id: '9007199254740994', apiKey: 'sk-beta654321', keyAlias: '', displayKey: 'sk-*********654321', label: 'sk-*********654321', lastSyncedAt: null },
+  { id: '9007199254740993', apiKey: 'sk-alpha123456', keyAlias: 'Primary', displayKey: 'sk-*********123456', label: 'Primary', lastSyncedAt: '2026-05-13T00:00:00Z', quotaLimitUsd: 0, quotaUsedUsd: 0, rateLimitEnabled: false, fiveHourLimitUsd: 0, fiveHourUsedUsd: 0, dailyLimitUsd: 0, dailyUsedUsd: 0, sevenDayLimitUsd: 0, sevenDayUsedUsd: 0, rateLimitResetAt: null, expiresAt: null, costAvailable: true },
+  { id: '9007199254740994', apiKey: 'sk-beta654321', keyAlias: '', displayKey: 'sk-*********654321', label: 'sk-*********654321', lastSyncedAt: null, quotaLimitUsd: 0, quotaUsedUsd: 0, rateLimitEnabled: false, fiveHourLimitUsd: 0, fiveHourUsedUsd: 0, dailyLimitUsd: 0, dailyUsedUsd: 0, sevenDayLimitUsd: 0, sevenDayUsedUsd: 0, rateLimitResetAt: null, expiresAt: null, costAvailable: true },
 ];
 
 const renderCard = (props: Partial<React.ComponentProps<typeof ApiKeySettingsCard>> = {}) => renderToStaticMarkup(
@@ -16,6 +16,8 @@ const renderCard = (props: Partial<React.ComponentProps<typeof ApiKeySettingsCar
     loading={false}
     savingId={null}
     onSaveAlias={() => undefined}
+    onSaveLimits={() => undefined}
+    onResetLimits={() => undefined}
     {...props}
   />,
 );

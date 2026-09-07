@@ -14,6 +14,7 @@ import (
 	"cpa-usage-keeper/internal/auth"
 	keeperconfig "cpa-usage-keeper/internal/config"
 	"cpa-usage-keeper/internal/poller"
+	"cpa-usage-keeper/internal/service"
 )
 
 const embeddedUsageSource = "embedded"
@@ -103,6 +104,13 @@ func (r *Runtime) CreateAdminSession(ip, userAgent string) (string, error) {
 		UserAgent: userAgent,
 	})
 	return token, err
+}
+
+func (r *Runtime) CheckAPIKeyLimits(ctx context.Context, apiKey string) (service.CPAAPIKeyLimitDecision, error) {
+	if r == nil || r.app == nil || r.app.APIKeyLimits == nil {
+		return service.CPAAPIKeyLimitDecision{Allowed: true}, nil
+	}
+	return r.app.APIKeyLimits.CheckCPAAPIKeyLimits(ctx, apiKey)
 }
 
 func (r *Runtime) Ingest(ctx context.Context, payload []byte) error {

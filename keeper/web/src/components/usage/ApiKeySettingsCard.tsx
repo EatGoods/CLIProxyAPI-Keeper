@@ -3,9 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { IconCheck, IconCopy, IconEye, IconEyeOff } from '@/components/ui/icons';
+import { Modal } from '@/components/ui/Modal';
+import { IconCheck, IconCopy, IconEye, IconEyeOff, IconSettings } from '@/components/ui/icons';
 import { useScrollBoundaryContainment } from '@/hooks/useScrollBoundaryContainment';
-import type { CpaApiKeySettingsItem } from '@/lib/types';
+import type { CpaApiKeyLimitsInput, CpaApiKeySettingsItem } from '@/lib/types';
 import styles from '@/pages/UsagePage.module.scss';
 
 type ClipboardWriter = Pick<Clipboard, 'writeText'>;
@@ -88,10 +89,12 @@ export interface ApiKeySettingsCardProps {
   loading?: boolean;
   savingId?: string | null;
   onSaveAlias: (id: string, keyAlias: string) => void | Promise<void>;
+  onSaveLimits: (id: string, limits: CpaApiKeyLimitsInput) => void | Promise<void>;
+  onResetLimits: (id: string) => void | Promise<void>;
   onNotice?: (kind: 'success' | 'info' | 'error', message: string) => void;
 }
 
-export function ApiKeySettingsCard({ apiKeys, loading = false, savingId = null, onSaveAlias, onNotice }: ApiKeySettingsCardProps) {
+export function ApiKeySettingsCard({ apiKeys, loading = false, savingId = null, onSaveAlias, onSaveLimits, onResetLimits, onNotice }: ApiKeySettingsCardProps) {
   const { t } = useTranslation();
   const [showFullApiKeys, setShowFullApiKeys] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -103,10 +106,32 @@ export function ApiKeySettingsCard({ apiKeys, loading = false, savingId = null, 
     [apiKeys],
   );
   const [draftAliases, setDraftAliases] = useState<Record<string, string>>(initialAliases);
+  const [editingLimits, setEditingLimits] = useState<CpaApiKeySettingsItem | null>(null);
+  const [limitDraft, setLimitDraft] = useState<CpaApiKeyLimitsInput | null>(null);
+
+  const openLimits = (item: CpaApiKeySettingsItem) => {
+    setEditingLimits(item);
+    setLimitDraft({
+      quotaLimitUsd: item.quotaLimitUsd,
+      rateLimitEnabled: item.rateLimitEnabled,
+      fiveHourLimitUsd: item.fiveHourLimitUsd,
+      dailyLimitUsd: item.dailyLimitUsd,
+      sevenDayLimitUsd: item.sevenDayLimitUsd,
+      expiresAt: item.expiresAt,
+    });
+  };
+
+  const setAmount = (field: keyof Pick<CpaApiKeyLimitsInput, 'quotaLimitUsd' | 'fiveHourLimitUsd' | 'dailyLimitUsd' | 'sevenDayLimitUsd'>, value: string) => {
+    setLimitDraft((current) => current ? { ...current, [field]: Math.max(0, Number(value) || 0) } : current);
+  };
 
   useEffect(() => {
     setDraftAliases(initialAliases);
   }, [initialAliases]);
+
+  useEffect(() => {
+    setEditingLimits((current) => current ? apiKeys.find((item) => item.id === current.id) ?? null : null);
+  }, [apiKeys]);
 
   useEffect(() => () => {
     if (copyResetTimerRef.current) {
@@ -205,6 +230,18 @@ export function ApiKeySettingsCard({ apiKeys, loading = false, savingId = null, 
                       >
                         {disabled ? t('usage_stats.api_key_settings_saving') : t('common.save')}
                       </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        appearance="action"
+                        onClick={() => openLimits(item)}
+                        disabled={disabled}
+                        aria-label={t('usage_stats.api_key_limits_configure')}
+                        title={t('usage_stats.api_key_limits_configure')}
+                      >
+                        <IconSettings size={15} />
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -213,6 +250,42 @@ export function ApiKeySettingsCard({ apiKeys, loading = false, savingId = null, 
           </div>
         )}
       </div>
+      <Modal
+        open={editingLimits !== null && limitDraft !== null}
+        title={t('usage_stats.api_key_limits_title')}
+        onClose={() => setEditingLimits(null)}
+        closeDisabled={Boolean(editingLimits && savingId === editingLimits.id)}
+        width={520}
+        footer={
+          <>
+            <Button variant="secondary" appearance="action" onClick={() => editingLimits && onResetLimits(editingLimits.id)} disabled={!editingLimits || savingId === editingLimits.id}>
+              {t('usage_stats.api_key_limits_reset')}
+            </Button>
+            <Button variant="primary" appearance="action" onClick={() => editingLimits && limitDraft && onSaveLimits(editingLimits.id, limitDraft)} loading={Boolean(editingLimits && savingId === editingLimits.id)}>
+              {t('common.save')}
+            </Button>
+          </>
+        }
+      >
+        {editingLimits && limitDraft && (
+          <div className={styles.apiKeyLimitsForm}>
+            <div className={styles.apiKeyLimitsUsage}>{t('usage_stats.api_key_limits_total_used', { value: editingLimits.quotaUsedUsd.toFixed(4) })}</div>
+            {!editingLimits.costAvailable && <div className={styles.errorBox}>{t('usage_stats.api_key_limits_pricing_unavailable')}</div>}
+            <Input label={t('usage_stats.api_key_limits_quota')} type="number" min="0" step="0.0001" value={limitDraft.quotaLimitUsd} onChange={(event) => setAmount('quotaLimitUsd', event.target.value)} disabled={savingId === editingLimits.id} />
+            <label className={styles.apiKeyLimitsToggle}>
+              <input type="checkbox" checked={limitDraft.rateLimitEnabled} onChange={(event) => setLimitDraft({ ...limitDraft, rateLimitEnabled: event.target.checked })} disabled={savingId === editingLimits.id} />
+              <span>{t('usage_stats.api_key_limits_rate_enabled')}</span>
+            </label>
+            <div className={styles.apiKeyLimitsGrid}>
+              <Input label={t('usage_stats.api_key_limits_5h', { value: editingLimits.fiveHourUsedUsd.toFixed(4) })} type="number" min="0" step="0.0001" value={limitDraft.fiveHourLimitUsd} onChange={(event) => setAmount('fiveHourLimitUsd', event.target.value)} disabled={!limitDraft.rateLimitEnabled || savingId === editingLimits.id} />
+              <Input label={t('usage_stats.api_key_limits_day', { value: editingLimits.dailyUsedUsd.toFixed(4) })} type="number" min="0" step="0.0001" value={limitDraft.dailyLimitUsd} onChange={(event) => setAmount('dailyLimitUsd', event.target.value)} disabled={!limitDraft.rateLimitEnabled || savingId === editingLimits.id} />
+              <Input label={t('usage_stats.api_key_limits_7d', { value: editingLimits.sevenDayUsedUsd.toFixed(4) })} type="number" min="0" step="0.0001" value={limitDraft.sevenDayLimitUsd} onChange={(event) => setAmount('sevenDayLimitUsd', event.target.value)} disabled={!limitDraft.rateLimitEnabled || savingId === editingLimits.id} />
+              <Input label={t('usage_stats.api_key_limits_expiry')} type="datetime-local" value={limitDraft.expiresAt ? limitDraft.expiresAt.slice(0, 16) : ''} onChange={(event) => setLimitDraft({ ...limitDraft, expiresAt: event.target.value ? new Date(event.target.value).toISOString() : null })} disabled={savingId === editingLimits.id} />
+            </div>
+            <div className={styles.hint}>{t('usage_stats.api_key_limits_zero_hint')}</div>
+          </div>
+        )}
+      </Modal>
     </Card>
   );
 }

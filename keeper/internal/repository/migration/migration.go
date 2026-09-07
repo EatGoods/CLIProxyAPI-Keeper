@@ -92,6 +92,7 @@ const (
 	migrationResetQuotaHistory = "20260827_reset_quota_history"
 	// migrationRepairUsageEventQuotaWindowIndex 修复旧 migration 记录与物理索引不一致的数据库。
 	migrationRepairUsageEventQuotaWindowIndex = "20260902_repair_usage_event_quota_window_index"
+	migrationAddCPAAPIKeyLimits               = "20260907_add_cpa_api_key_limits"
 )
 
 type schemaMigration struct {
@@ -235,6 +236,7 @@ func orderedMigrations() []databaseMigration {
 		{version: migrationResetQuotaHistory, run: resetQuotaHistoryMigration, destructive: true},
 		// 历史 migration 不会重跑；用新版本幂等补齐额度历史查询强制依赖的索引。
 		{version: migrationRepairUsageEventQuotaWindowIndex, run: repairUsageEventQuotaWindowIndexMigration},
+		{version: migrationAddCPAAPIKeyLimits, run: addCPAAPIKeyLimitsMigration},
 	}
 }
 

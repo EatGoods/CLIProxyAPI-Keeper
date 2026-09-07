@@ -781,6 +781,27 @@ export interface CpaApiKeyDisplayItem {
 
 export interface CpaApiKeySettingsItem extends CpaApiKeyDisplayItem {
   apiKey: string
+  quotaLimitUsd: number
+  quotaUsedUsd: number
+  rateLimitEnabled: boolean
+  fiveHourLimitUsd: number
+  fiveHourUsedUsd: number
+  dailyLimitUsd: number
+  dailyUsedUsd: number
+  sevenDayLimitUsd: number
+  sevenDayUsedUsd: number
+  rateLimitResetAt: string | null
+  expiresAt: string | null
+  costAvailable: boolean
+}
+
+export interface CpaApiKeyLimitsInput {
+  quotaLimitUsd: number
+  rateLimitEnabled: boolean
+  fiveHourLimitUsd: number
+  dailyLimitUsd: number
+  sevenDayLimitUsd: number
+  expiresAt: string | null
 }
 
 export interface CpaApiKeyOption {

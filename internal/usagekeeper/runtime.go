@@ -114,11 +114,42 @@ func (r *Runtime) ServerOptions() []api.ServerOption {
 			engine.Any(basePath+"/*path", serveKeeper)
 		}),
 		api.WithUsageKeeperSessionHandler(r.createManagementSession),
+		api.WithAuthenticatedMiddleware(r.enforceAPIKeyLimits),
 	}
 	if r.registerKey {
 		options = append(options, api.WithLocalManagementPassword(r.managementKey))
 	}
 	return options
+}
+
+func (r *Runtime) enforceAPIKeyLimits(c *gin.Context) {
+	principal, _ := c.Get("userApiKey")
+	apiKey, _ := principal.(string)
+	if strings.TrimSpace(apiKey) == "" {
+		c.Next()
+		return
+	}
+	if r == nil || r.embedded == nil {
+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "limit_check_failed", "message": "API key limit check failed"}})
+		return
+	}
+	decision, err := r.embedded.CheckAPIKeyLimits(c.Request.Context(), apiKey)
+	if err != nil {
+		log.WithError(err).Error("embedded usage keeper could not check API key limits")
+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "limit_check_failed", "message": "API key limit check failed"}})
+		return
+	}
+	if decision.Allowed {
+		c.Next()
+		return
+	}
+	status := http.StatusTooManyRequests
+	if decision.Code == "api_key_expired" {
+		status = http.StatusForbidden
+	} else if decision.Code == "pricing_unavailable" {
+		status = http.StatusServiceUnavailable
+	}
+	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"type": decision.Code, "message": decision.Message}})
 }
 
 func (r *Runtime) createManagementSession(c *gin.Context) {

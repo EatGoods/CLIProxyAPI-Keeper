@@ -72,6 +72,7 @@ type App struct {
 	BackupMaintenance *DatabaseBackupRunner
 	RecentUsageCache  *repository.UsageRecentEventCache
 	PricingCatalog    *pricing.Catalog
+	APIKeyLimits      service.CPAAPIKeyLimitProvider
 	AuthSessions      *auth.SessionManager
 	LogCloser         io.Closer
 
@@ -315,6 +316,10 @@ func newWithConfig(cfg config.Config, logCloser io.Closer) (*App, error) {
 		OnDisplayNameChanged: quotaService.UpdateUsageIdentityDisplayNameSnapshot,
 	})
 	cpaAPIKeyService := service.NewCPAAPIKeyService(db)
+	cpaAPIKeyLimitService := service.NewCPAAPIKeyLimitService(db, service.CPAAPIKeyLimitServiceOptions{
+		RecentUsage:    recentUsageCache,
+		PricingCatalog: pricingCatalog,
+	})
 	authFilesManagementService := service.NewAuthFilesManagementService(cpaClient)
 	if cfg.TLSSkipVerify {
 		logrus.WithField("cpa_base_url", cfg.CPABaseURL).Warn("TLS certificate verification is disabled for CPA and Redis queue connections")
@@ -357,6 +362,7 @@ func newWithConfig(cfg config.Config, logCloser io.Closer) (*App, error) {
 		BackupMaintenance: backupMaintenance,
 		RecentUsageCache:  recentUsageCache,
 		PricingCatalog:    pricingCatalog,
+		APIKeyLimits:      cpaAPIKeyLimitService,
 		AuthSessions:      sessionManager,
 		LogCloser:         logCloser,
 		Router: api.NewRouter(
@@ -372,6 +378,7 @@ func newWithConfig(cfg config.Config, logCloser io.Closer) (*App, error) {
 				ErrorEvents:   errorEventService,
 				Quota:         quotaService,
 				CPAAPIKeys:    cpaAPIKeyService,
+				APIKeyLimits:  cpaAPIKeyLimitService,
 				AuthFiles:     authFilesManagementService,
 				RequestLogs:   requestLogService,
 				Ranking:       rankingService,

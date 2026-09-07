@@ -34,6 +34,18 @@ const apiKey: CpaApiKeySettingsItem = {
   displayKey: 'sk-*********123456',
   label: 'Primary',
   lastSyncedAt: '2026-05-13T00:00:00Z',
+  quotaLimitUsd: 0,
+  quotaUsedUsd: 0,
+  rateLimitEnabled: false,
+  fiveHourLimitUsd: 0,
+  fiveHourUsedUsd: 0,
+  dailyLimitUsd: 0,
+  dailyUsedUsd: 0,
+  sevenDayLimitUsd: 0,
+  sevenDayUsedUsd: 0,
+  rateLimitResetAt: null,
+  expiresAt: null,
+  costAvailable: true,
 }
 
 describe('ApiKeySettingsCard copy action', () => {
@@ -73,6 +85,8 @@ describe('ApiKeySettingsCard copy action', () => {
         <ApiKeySettingsCard
           apiKeys={[apiKey]}
           onSaveAlias={() => undefined}
+          onSaveLimits={() => undefined}
+          onResetLimits={() => undefined}
           onNotice={onNotice}
         />,
       )

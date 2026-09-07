@@ -12,6 +12,7 @@ import (
 
 	"cpa-usage-keeper/internal/config"
 	"cpa-usage-keeper/internal/entities"
+	"cpa-usage-keeper/internal/pricing"
 	"cpa-usage-keeper/internal/repository"
 	"cpa-usage-keeper/internal/service"
 
@@ -238,6 +239,42 @@ func TestUpdateCPAAPIKeyAliasRejectsInvalidInputAndDeletedRows(t *testing.T) {
 		if resp.Code != tc.want {
 			t.Fatalf("%s: expected status %d, got %d body=%s", tc.name, tc.want, resp.Code, resp.Body.String())
 		}
+	}
+}
+
+func TestUpdateAndResetCPAAPIKeyLimits(t *testing.T) {
+	db := openCPAAPIKeyAPITestDatabase(t)
+	if err := db.Create(&entities.CPAAPIKey{APIKey: "limited-key", DisplayKey: "limited-key"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	limitProvider := service.NewCPAAPIKeyLimitService(db, service.CPAAPIKeyLimitServiceOptions{PricingCatalog: pricing.NewCatalog(pricing.EmptySnapshot())})
+	router := NewRouter(nil, statusStub{}, nil, nil, AuthConfig{}, nil, "", OptionalProviders{
+		CPAAPIKeys:   service.NewCPAAPIKeyService(db),
+		APIKeyLimits: limitProvider,
+	})
+
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/usage/api-keys/1/limits", strings.NewReader(`{"quotaLimitUsd":12.5,"rateLimitEnabled":true,"fiveHourLimitUsd":1,"dailyLimitUsd":2,"sevenDayLimitUsd":3,"expiresAt":"2026-12-01T00:00:00Z"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(requestIntentHeaderName, requestIntentHeaderValueFetch)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("update status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response cpaAPIKeySettingsResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.QuotaLimitUSD != 12.5 || response.FiveHourLimitUSD != 1 || !response.RateLimitEnabled || response.ExpiresAt == nil {
+		t.Fatalf("response = %+v", response)
+	}
+
+	reset := httptest.NewRecorder()
+	resetRequest := httptest.NewRequest(http.MethodPost, "/api/v1/usage/api-keys/1/limits/reset", nil)
+	resetRequest.Header.Set(requestIntentHeaderName, requestIntentHeaderValueFetch)
+	router.ServeHTTP(reset, resetRequest)
+	if reset.Code != http.StatusOK {
+		t.Fatalf("reset status = %d, body = %s", reset.Code, reset.Body.String())
 	}
 }
 

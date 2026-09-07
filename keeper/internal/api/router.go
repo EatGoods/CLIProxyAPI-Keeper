@@ -54,6 +54,7 @@ type OptionalProviders struct {
 	ErrorEvents   service.ErrorEventProvider
 	Quota         QuotaProvider
 	CPAAPIKeys    service.CPAAPIKeyProvider
+	APIKeyLimits  service.CPAAPIKeyLimitProvider
 	AuthFiles     service.AuthFilesManagementProvider
 	RequestLogs   service.RequestLogProvider
 	Ranking       rankinghttpapi.Provider
@@ -98,6 +99,7 @@ func NewRouter(
 	var errorEventProvider service.ErrorEventProvider
 	var quotaProvider QuotaProvider
 	var cpaAPIKeyProvider service.CPAAPIKeyProvider
+	var apiKeyLimitProvider service.CPAAPIKeyLimitProvider
 	var authFilesProvider service.AuthFilesManagementProvider
 	var requestLogProvider service.RequestLogProvider
 	var rankingProvider rankinghttpapi.Provider
@@ -108,6 +110,7 @@ func NewRouter(
 		errorEventProvider = optionalProviders[0].ErrorEvents
 		quotaProvider = optionalProviders[0].Quota
 		cpaAPIKeyProvider = optionalProviders[0].CPAAPIKeys
+		apiKeyLimitProvider = optionalProviders[0].APIKeyLimits
 		authFilesProvider = optionalProviders[0].AuthFiles
 		requestLogProvider = optionalProviders[0].RequestLogs
 		rankingProvider = optionalProviders[0].Ranking
@@ -135,7 +138,7 @@ func NewRouter(
 	registerErrorEventRoutes(adminProtected, errorEventProvider)
 	registerAuthFileManagementRoutes(adminProtected, authFilesProvider)
 	registerAuthSessionManagementRoutes(adminProtected, authHandler)
-	registerCPAAPIKeyRoutes(adminProtected, cpaAPIKeyProvider)
+	registerCPAAPIKeyRoutes(adminProtected, cpaAPIKeyProvider, apiKeyLimitProvider)
 	registerPricingRoutes(adminProtected, pricingProvider)
 	registerQuotaRoutes(adminProtected, quotaProvider)
 	if rankingProvider != nil {

@@ -9,8 +9,24 @@ type CPAAPIKey struct {
 	DisplayKey           string
 	KeyAlias             string
 	LocalRankingAvatarID *uint8
+	QuotaLimitMicrousd   int64
+	RateLimitEnabled     bool
+	RateLimit5hMicrousd  int64 `gorm:"column:rate_limit_5h_microusd"`
+	RateLimitDayMicrousd int64
+	RateLimit7dMicrousd  int64      `gorm:"column:rate_limit_7d_microusd"`
+	RateLimitResetAt     *time.Time `gorm:"serializer:storageTime"`
+	ExpiresAt            *time.Time `gorm:"serializer:storageTime"`
 	IsDeleted            bool       `gorm:"index:idx_cpa_api_keys_is_deleted"`
 	LastSyncedAt         *time.Time `gorm:"serializer:storageTime"`
 	CreatedAt            time.Time  `gorm:"serializer:storageTime"`
 	UpdatedAt            time.Time  `gorm:"serializer:storageTime"`
+}
+
+type CPAAPIKeyLimits struct {
+	QuotaLimitMicrousd   int64
+	RateLimitEnabled     bool
+	RateLimit5hMicrousd  int64
+	RateLimitDayMicrousd int64
+	RateLimit7dMicrousd  int64
+	ExpiresAt            *time.Time
 }

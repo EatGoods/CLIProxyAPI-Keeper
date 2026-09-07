@@ -1726,6 +1726,11 @@ func TestInjectManagementUsageKeeper(t *testing.T) {
 		`cpa_usage_keeper_embed_session`,
 		`/v0/management/provider-note`,
 		`data-cpa-provider-note-cell`,
+		`/api/v1/usage/api-keys/settings`,
+		`X-CPA-Usage-Keeper-Embed`,
+		`data-cpa-api-key-alias`,
+		`cpa-api-key-alias-input`,
+		`dblclick`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("injected management page missing %q", want)

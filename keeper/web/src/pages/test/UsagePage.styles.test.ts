@@ -34,6 +34,7 @@ const sessionSettingsSource = readSource(new URL('../../components/usage/Session
 const analysisPanelSource = readSource(new URL('../../components/usage/analysis/AnalysisPanel.tsx', import.meta.url))
 const analysisPanelStyles = readSource(new URL('../../components/usage/analysis/AnalysisPanel.module.scss', import.meta.url))
 const overviewRealtimePanelSource = readSource(new URL('../../components/usage/OverviewRealtimePanel.tsx', import.meta.url))
+const overviewRangeMetricsPanelSource = readSource(new URL('../../components/usage/OverviewRangeMetricsPanel.tsx', import.meta.url))
 const overviewActivityCardsSource = readSource(new URL('../../components/usage/OverviewActivityCards.tsx', import.meta.url))
 const activityHeatmapGridSource = readSource(new URL('../../components/usage/ActivityHeatmapGrid.tsx', import.meta.url))
 const serviceHealthCardSource = readSource(new URL('../../components/usage/ServiceHealthCard.tsx', import.meta.url))
@@ -627,18 +628,19 @@ describe('UsagePage toolbar styles', () => {
     expect(usagePageStyles).toMatch(/\.primaryStatSlot\s*\{[\s\S]*?@include mobile\s*\{[\s\S]*?flex:\s*0 0 auto;[\s\S]*?width:\s*100%;/)
   })
 
-  it('renders Recent Activity between the stat cards and realtime metrics', () => {
+  it('renders Recent Activity between the stat cards and range metrics', () => {
     const realtimeCard = styleRuleBlock(usagePageStyles, '.overviewRealtimeCard')
     const realtimeCompactCard = styleRuleBlock(usagePageStyles, '.overviewRealtimeCardCompact')
     const lightTokenActivityCard = styleRuleBlock(usagePageStyles, '.tokenActivityCard')
     const darkTokenActivityCard = styleRuleBlock(usagePageStyles, ":global([data-theme='dark']) .tokenActivityCard")
 
-    expect(usagePageSource).toContain('<OverviewRealtimePanel')
+    expect(usagePageSource).toContain('<OverviewRangeMetricsPanel')
+    expect(usagePageSource).not.toContain('<OverviewRealtimePanel')
     expect(keyOverviewPageSource).toContain('<OverviewRealtimePanel')
     expect(usagePageSource).toContain('<RecentActivityPanel')
     expect(keyOverviewPageSource).toContain('<RecentActivityPanel')
     expect(usagePageSource.indexOf('<StatCards')).toBeLessThan(usagePageSource.indexOf('<RecentActivityPanel'))
-    expect(usagePageSource.indexOf('<RecentActivityPanel')).toBeLessThan(usagePageSource.indexOf('<OverviewRealtimePanel'))
+    expect(usagePageSource.indexOf('<RecentActivityPanel')).toBeLessThan(usagePageSource.indexOf('<OverviewRangeMetricsPanel'))
     expect(keyOverviewPageSource.indexOf('<StatCards')).toBeLessThan(keyOverviewPageSource.indexOf('<RecentActivityPanel'))
     expect(keyOverviewPageSource.indexOf('<RecentActivityPanel')).toBeLessThan(keyOverviewPageSource.indexOf('<OverviewRealtimePanel'))
     expect(usagePageStyles).toMatch(/\.recentActivityTitle\s*\{[\s\S]*?font-size:\s*17px;[\s\S]*?font-weight:\s*800;/)
@@ -669,7 +671,7 @@ describe('UsagePage toolbar styles', () => {
     expect(realtimeCompactCard).not.toContain('padding:')
     expect(usagePageStyles).not.toMatch(/\.overviewRealtimeSection\s*\{[\s\S]*?border-top:/)
     expect(usagePageStyles).not.toMatch(/\.overviewRealtimeSection\s*\{[\s\S]*?padding-top:/)
-    expect(usagePageSource).toContain("value === '15m' || value === '30m' || value === '60m'")
+    expect(usagePageSource).not.toContain("value === '15m' || value === '30m' || value === '60m'")
     expect(keyOverviewPageSource).toContain("value === '15m' || value === '30m' || value === '60m'")
     expect(usagePageSource).not.toContain("value === '5m'")
     expect(keyOverviewPageSource).not.toContain("value === '5m'")
@@ -704,6 +706,15 @@ describe('UsagePage toolbar styles', () => {
     expect(i18nSource).not.toContain('overview_realtime_response_level')
     expect(i18nSource).not.toContain('overview_realtime_ttft_p95')
     expect(i18nSource).not.toContain('overview_realtime_latency_p95')
+  })
+
+  it('uses the selected overview range for range metrics without a second window selector', () => {
+    expect(overviewRangeMetricsPanelSource).toContain('overview_range_section_title')
+    expect(overviewRangeMetricsPanelSource).toContain('analysis?.model_composition')
+    expect(overviewRangeMetricsPanelSource).toContain('series?.tpm')
+    expect(overviewRangeMetricsPanelSource).not.toContain('REALTIME_WINDOWS')
+    expect(usagePageSource).not.toContain('useOverviewRealtimeData')
+    expect(apiIndexSource).toContain("export { OverviewRangeMetricsPanel } from './OverviewRangeMetricsPanel';")
   })
 
   it('crossfades normal filters and ranking scope in one stable slot while Refresh stays fixed', () => {
@@ -1128,7 +1139,7 @@ describe('UsagePage toolbar styles', () => {
     expect(usagePageStyles).not.toContain('.settingsCompactAction')
     expect(apiKeyButtonsBlock).not.toContain('min-height: 40px;')
     expect(sessionButtonBlock).not.toContain('min-height: 40px;')
-    expect(apiKeySettingsSource.match(/appearance="action"/g)).toHaveLength(1)
+    expect(apiKeySettingsSource.match(/appearance="action"/g)).toHaveLength(4)
     expect(apiKeySettingsSource).not.toContain('styles.apiKeySettingsCopyButton')
     expect(sessionSettingsSource.match(/appearance="action"/g)).toHaveLength(3)
   })
@@ -1372,18 +1383,18 @@ describe('UsagePage toolbar styles', () => {
     expect(keyOverviewPageStyles).not.toContain('.rangeSelectControl')
   })
 
-  it('passes realtime error state and current data guard to the realtime panel', () => {
-    expect(usagePageSource).toContain('error: realtimeError')
-    expect(usagePageSource).toContain('const displayRealtimeError = realtimeError')
-    expect(usagePageSource).toContain('realtime={currentRealtime ?? undefined}')
-    expect(usagePageSource).toContain('error={displayRealtimeError}')
+  it('passes current range data and analysis states to the range metrics panel', () => {
+    expect(usagePageSource).toContain('usage={currentOverviewUsage}')
+    expect(usagePageSource).toContain('analysis={analysisData}')
+    expect(usagePageSource).toContain('latency={analysisLatencyData}')
+    expect(usagePageSource).toContain('analysisError={analysisError}')
   })
 
   it('loads both Activity cards through one independent Recent Activity request', () => {
     expect(usagePageSource).toContain('useUsageActivityData({')
     expect(usagePageSource).toContain('useRecentActivityWindow(usageRangeQuery)')
-    expect(usagePageSource).toContain('await Promise.all([loadUsage(), loadActivity(), loadRealtime()])')
-    expect(usagePageSource).toContain('await Promise.all([loadUsage(), loadActivity({ skipIfInFlight: true }), loadRealtime()])')
+    expect(usagePageSource).toContain('await Promise.all([loadUsage(), loadActivity(), loadAnalysis()])')
+    expect(usagePageSource).toContain('await Promise.all([loadUsage(), loadActivity({ skipIfInFlight: true })])')
     expect(usagePageSource).not.toContain('<ServiceHealthCard')
     expect(usagePageSource).not.toContain('showEyebrow')
   })

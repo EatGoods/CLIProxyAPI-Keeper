@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiError, appPath, createUsageEventRequestLogDownloadURL, exportUsageEvents, fetchAnalysis, fetchAnalysisLatency, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeySettings, fetchStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchVersion, isUsageRangeBoundsConflict, logout, revokeAuthSession, updateAuthSessionAlias, updateCpaApiKeyAlias, type UsageEventsExportFormat } from '@/lib/api';
-import type { AnalysisLatencyDiagnostics, AnalysisResponse, AuthManagedSessionItem, CpaApiKeyOption, CpaApiKeySettingsItem, OverviewRealtimeWindow, StatusResponse, UsageCustomRange, UsageEvent, UsageEventRequestLogResponse, UsageSourceFilterOption, UsageTimeRange, VersionResponse } from '@/lib/types';
+import { ApiError, appPath, createUsageEventRequestLogDownloadURL, exportUsageEvents, fetchAnalysis, fetchAnalysisLatency, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeySettings, fetchStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchVersion, isUsageRangeBoundsConflict, logout, resetCpaApiKeyRateLimitUsage, revokeAuthSession, updateAuthSessionAlias, updateCpaApiKeyAlias, updateCpaApiKeyLimits, type UsageEventsExportFormat } from '@/lib/api';
+import type { AnalysisLatencyDiagnostics, AnalysisResponse, AuthManagedSessionItem, CpaApiKeyLimitsInput, CpaApiKeyOption, CpaApiKeySettingsItem, StatusResponse, UsageCustomRange, UsageEvent, UsageEventRequestLogResponse, UsageSourceFilterOption, UsageTimeRange, VersionResponse } from '@/lib/types';
 import { DEFAULT_USAGE_TAB, getUsageTabPath, handleUsageTabKeyActivation, resolveInitialUsageTab, shouldHandleUsageNavigation, USAGE_TAB_OPTIONS, type UsageTab } from '@/lib/usageNavigation';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
@@ -16,7 +16,7 @@ import { useThemeStore } from '@/stores';
 import {
   StatCards,
   RecentActivityPanel,
-  OverviewRealtimePanel,
+  OverviewRangeMetricsPanel,
   AnalysisPanel,
   ApiKeySettingsCard,
   SessionSettingsCard,
@@ -29,7 +29,6 @@ import {
   useUsageData,
   useRecentActivityWindow,
   useUsageActivityData,
-  useOverviewRealtimeData,
   usePricingData,
   useSparklines,
   useCredentialsTabData,
@@ -59,11 +58,9 @@ import styles from './UsagePage.module.scss';
 
 const TIME_RANGE_STORAGE_KEY = 'cli-proxy-usage-time-range-v1';
 const LEGACY_CUSTOM_RANGE_STORAGE_KEY = 'cli-proxy-usage-custom-range-v1';
-const OVERVIEW_REALTIME_WINDOW_STORAGE_KEY = 'cli-proxy-usage-overview-realtime-window-v1';
 const API_KEY_FILTER_STORAGE_KEY = 'cli-proxy-usage-api-key-filter-v1';
 export const REQUEST_EVENTS_PREFERENCES_STORAGE_KEY = 'cli-proxy-usage-request-events-preferences-v1';
 const DEFAULT_TIME_RANGE: UsageTimeRange = 'today';
-const DEFAULT_REALTIME_WINDOW: OverviewRealtimeWindow = '15m';
 const THEME_OPTIONS: ReadonlyArray<{ value: Theme; labelKey: string }> = [
   { value: 'white', labelKey: 'usage_stats.theme_light' },
   { value: 'dark', labelKey: 'usage_stats.theme_dark' },
@@ -665,22 +662,6 @@ const loadUsageTab = (): UsageTab => {
   );
 };
 
-const isOverviewRealtimeWindow = (value: unknown): value is OverviewRealtimeWindow => (
-  value === '15m' || value === '30m' || value === '60m'
-);
-
-const loadRealtimeWindow = (): OverviewRealtimeWindow => {
-  try {
-    if (typeof localStorage === 'undefined') {
-      return DEFAULT_REALTIME_WINDOW;
-    }
-    const raw = localStorage.getItem(OVERVIEW_REALTIME_WINDOW_STORAGE_KEY);
-    return isOverviewRealtimeWindow(raw) ? raw : DEFAULT_REALTIME_WINDOW;
-  } catch {
-    return DEFAULT_REALTIME_WINDOW;
-  }
-};
-
 export const API_KEY_FILTER_MAX_LENGTH = 19;
 const MAX_API_KEY_FILTER_ID = 9223372036854775807n;
 
@@ -760,7 +741,6 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const pendingLegacyCustomRangeRef = useRef(loadedTimeRange.pendingLegacyCustomRange);
   const [timeRangeState, setTimeRangeState] = useState<StoredUsageRangeState>(loadedTimeRange.state);
   const { range: timeRange, customRange } = timeRangeState;
-  const [realtimeWindow, setRealtimeWindow] = useState<OverviewRealtimeWindow>(loadRealtimeWindow);
   const [selectedApiKeyId, setSelectedApiKeyId] = useState(loadSelectedApiKeyId);
   const [apiKeyOptions, setApiKeyOptions] = useState<CpaApiKeyOption[]>([]);
   const [apiKeyOptionsLoaded, setApiKeyOptionsLoaded] = useState(false);
@@ -852,17 +832,6 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     }
     setTimeRangeState((current) => ({ ...current, range }));
   }, [rangeTimeZone]);
-  const {
-    realtime: currentRealtime,
-    loading: realtimeLoading,
-    error: realtimeError,
-    loadRealtime
-  } = useOverviewRealtimeData({
-    onAuthRequired,
-    enabled: activeTab === 'overview' && apiKeyFilterReady,
-    apiKeyId: requestApiKeyId,
-    realtimeWindow,
-  });
   const {
     modelNames,
     modelPrices,
@@ -1150,6 +1119,34 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     }
   }, [onAuthRequired, patchLocalRankingProfileCache, showTopNotice, t]);
 
+  const handleSaveApiKeyLimits = useCallback(async (id: string, limits: CpaApiKeyLimitsInput) => {
+    setApiKeySettingsSavingId(id);
+    try {
+      const updated = await updateCpaApiKeyLimits(id, limits);
+      setApiKeySettings((current) => current.map((item) => item.id === id ? updated : item));
+      showTopNotice('success', t('usage_stats.api_key_limits_save_success'));
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) onAuthRequired?.();
+      showTopNotice('error', t('usage_stats.api_key_limits_save_failed'));
+    } finally {
+      setApiKeySettingsSavingId(null);
+    }
+  }, [onAuthRequired, showTopNotice, t]);
+
+  const handleResetApiKeyLimits = useCallback(async (id: string) => {
+    setApiKeySettingsSavingId(id);
+    try {
+      const updated = await resetCpaApiKeyRateLimitUsage(id);
+      setApiKeySettings((current) => current.map((item) => item.id === id ? updated : item));
+      showTopNotice('success', t('usage_stats.api_key_limits_reset_success'));
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) onAuthRequired?.();
+      showTopNotice('error', t('usage_stats.api_key_limits_reset_failed'));
+    } finally {
+      setApiKeySettingsSavingId(null);
+    }
+  }, [onAuthRequired, showTopNotice, t]);
+
   const handleRevokeAuthSession = useCallback(async (session: AuthManagedSessionItem) => {
     setAuthSessionRevokingId(session.id);
     setAuthSessionsError('');
@@ -1274,17 +1271,6 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     }
     setTimeRangeState(migratedState);
   }, [rangeTimeZone]);
-
-  useEffect(() => {
-    try {
-      if (typeof localStorage === 'undefined') {
-        return;
-      }
-      localStorage.setItem(OVERVIEW_REALTIME_WINDOW_STORAGE_KEY, realtimeWindow);
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [realtimeWindow]);
 
   useEffect(() => {
     try {
@@ -1678,8 +1664,8 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
       await Promise.all([loadAuthSessions(), loadApiKeySettings(), loadPricing()]);
       return;
     }
-    await Promise.all([loadUsage(), loadActivity(), loadRealtime()]);
-  }, [activeTab, apiKeyFilterReady, credentialSectionVisibility.enabled, loadActivity, loadAnalysis, loadApiKeySettings, loadAuthSessions, loadEventFilterOptions, loadEvents, loadPricing, loadRealtime, loadUsage, refreshCredentials, refreshRanking]);
+    await Promise.all([loadUsage(), loadActivity(), loadAnalysis()]);
+  }, [activeTab, apiKeyFilterReady, credentialSectionVisibility.enabled, loadActivity, loadAnalysis, loadApiKeySettings, loadAuthSessions, loadEventFilterOptions, loadEvents, loadPricing, loadUsage, refreshCredentials, refreshRanking]);
 
   const refreshAutoRefreshTab = useCallback(async () => {
     if (!apiKeyFilterReady && shouldShowRangeControls(activeTab)) return;
@@ -1691,8 +1677,8 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
       await refreshCredentials();
       return;
     }
-    await Promise.all([loadUsage(), loadActivity({ skipIfInFlight: true }), loadRealtime()]);
-  }, [activeTab, apiKeyFilterReady, credentialSectionVisibility.enabled, loadActivity, loadEvents, loadRealtime, loadUsage, refreshCredentials]);
+    await Promise.all([loadUsage(), loadActivity({ skipIfInFlight: true })]);
+  }, [activeTab, apiKeyFilterReady, credentialSectionVisibility.enabled, loadActivity, loadEvents, loadUsage, refreshCredentials]);
 
   const handleAutoRefreshError = useCallback((error: unknown) => {
     if (recoverRangeBoundsConflict(error)) return;
@@ -1819,7 +1805,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   }, [activeTab, loadEvents]);
 
   useEffect(() => {
-    if (activeTab !== 'analysis') {
+    if (activeTab !== 'analysis' && activeTab !== 'overview') {
       analysisRequestControllerRef.current?.abort();
       analysisRequestControllerRef.current = null;
       setAnalysisLoading(false);
@@ -1882,11 +1868,6 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   }, [eventsFilterOptionsLoaded, eventsModelFilter, eventsModelOptions, eventsResultFilter, eventsSourceFilter, eventsSourceOptions, resetEventsPage]);
 
   const displayStatusError = statusError === 'REFRESH_FAILED' ? t('notification.refresh_failed') : statusError;
-  const displayRealtimeError = realtimeError
-    ? realtimeError === 'AUTH_REQUIRED'
-      ? t('auth.session_expired')
-      : t('usage_stats.overview_realtime_load_failed')
-    : '';
   // 只有需要时间范围的 tab 才渲染 Range 控件，避免 Credentials/Pricing 产生空白占位。
   const showRangeControls = shouldShowRangeControls(activeTab);
   const showRankingScopeControl = activeTab === 'ranking' && !isEmbeddedInCPAMC;
@@ -2152,15 +2133,17 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   onWindowChange={setActivityWindow}
                 />
 
-                <OverviewRealtimePanel
-                  realtime={currentRealtime ?? undefined}
-                  loading={realtimeLoading}
-                  error={displayRealtimeError}
-                  window={realtimeWindow}
-                  onWindowChange={setRealtimeWindow}
+                <OverviewRangeMetricsPanel
+                  usage={currentOverviewUsage}
+                  analysis={analysisData}
+                  latency={analysisLatencyData}
+                  loading={overviewDisplayLoading}
+                  analysisLoading={analysisLoading}
+                  latencyLoading={analysisLatencyLoading}
+                  analysisError={analysisError}
+                  latencyError={analysisLatencyError}
                   isDark={isDark}
                   isMobile={isMobile}
-                  timezone={currentRealtime?.timezone ?? usage?.timezone}
                 />
               </>
             )}
@@ -2329,6 +2312,8 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   loading={apiKeySettingsLoading}
                   savingId={apiKeySettingsSavingId}
                   onSaveAlias={handleSaveApiKeyAlias}
+                  onSaveLimits={handleSaveApiKeyLimits}
+                  onResetLimits={handleResetApiKeyLimits}
                   onNotice={showTopNotice}
                 />
                 <PriceSettingsCard

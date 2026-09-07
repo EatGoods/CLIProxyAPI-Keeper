@@ -87,8 +87,27 @@ func TestOrderedMigrationsPreservesExecutionOrder(t *testing.T) {
 		"20260824_add_auth_session_alias",
 		"20260827_reset_quota_history",
 		"20260902_repair_usage_event_quota_window_index",
+		"20260907_add_cpa_api_key_limits",
 	}
 	assertStringSlicesEqual(t, want, got)
+}
+
+func TestCPAAPIKeyLimitMigrationAddsColumns(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "limits.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&entities.CPAAPIKey{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := addCPAAPIKeyLimitsMigration(db); err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range []string{"quota_limit_microusd", "rate_limit_enabled", "rate_limit_5h_microusd", "rate_limit_day_microusd", "rate_limit_7d_microusd", "rate_limit_reset_at", "expires_at"} {
+		if !db.Migrator().HasColumn(&entities.CPAAPIKey{}, column) {
+			t.Fatalf("expected cpa_api_keys.%s column to exist", column)
+		}
+	}
 }
 
 func TestOpenDatabaseRunsSchemaMigrationsAndAddsUsageEventRedisFields(t *testing.T) {

@@ -61,6 +61,7 @@ func (s *Server) setupRoutes() {
 	// OpenAI compatible API routes
 	v1 := s.engine.Group("/v1")
 	v1.Use(AuthMiddleware(s.accessManager))
+	v1.Use(s.authenticatedMiddleware...)
 	{
 		v1.GET("/models", s.unifiedModelsHandler(openaiHandlers, claudeCodeHandlers))
 		v1.POST("/chat/completions", openaiHandlers.ChatCompletions)
@@ -84,23 +85,30 @@ func (s *Server) setupRoutes() {
 
 	realtimeAuth := realtimeAuthMiddleware(s.accessManager, s.codexLiveHandler)
 	standardAuth := realtimeStandardAuthMiddleware(s.accessManager)
-	s.engine.GET("/v1/realtime", realtimeAuth, s.codexLiveHandler.HandleRealtimeWebsocket)
-	s.engine.POST("/v1/realtime", realtimeAuth, s.codexLiveHandler.Handle)
-	s.engine.POST("/v1/realtime/calls", realtimeAuth, s.codexLiveHandler.Handle)
-	s.engine.GET("/v1/realtime/calls/:call_id", realtimeAuth, s.codexLiveHandler.HandleSideband)
-	s.engine.POST("/v1/realtime/client_secrets", standardAuth, s.codexLiveHandler.CreateClientSecret)
-	s.engine.POST("/v1/realtime/sessions", standardAuth, s.codexLiveHandler.CreateLegacySession)
-	s.engine.POST("/v1/realtime/transcription_sessions", standardAuth, s.codexLiveHandler.HandleTranscriptionSession)
-	s.engine.GET("/v1/realtime/translations", realtimeAuth, s.codexLiveHandler.HandleTranslation)
-	s.engine.POST("/v1/realtime/translations", realtimeAuth, s.codexLiveHandler.HandleTranslation)
-	s.engine.POST("/v1/realtime/translations/client_secrets", standardAuth, s.codexLiveHandler.HandleTranslation)
-	s.engine.POST("/v1/realtime/calls/:call_id/hangup", standardAuth, s.codexLiveHandler.HandleHangup)
-	s.engine.POST("/v1/realtime/calls/:call_id/accept", standardAuth, s.codexLiveHandler.HandleSIPControl)
-	s.engine.POST("/v1/realtime/calls/:call_id/reject", standardAuth, s.codexLiveHandler.HandleSIPControl)
-	s.engine.POST("/v1/realtime/calls/:call_id/refer", standardAuth, s.codexLiveHandler.HandleSIPControl)
+	withAuthenticated := func(auth, handler gin.HandlerFunc) []gin.HandlerFunc {
+		handlers := make([]gin.HandlerFunc, 0, len(s.authenticatedMiddleware)+2)
+		handlers = append(handlers, auth)
+		handlers = append(handlers, s.authenticatedMiddleware...)
+		return append(handlers, handler)
+	}
+	s.engine.GET("/v1/realtime", withAuthenticated(realtimeAuth, s.codexLiveHandler.HandleRealtimeWebsocket)...)
+	s.engine.POST("/v1/realtime", withAuthenticated(realtimeAuth, s.codexLiveHandler.Handle)...)
+	s.engine.POST("/v1/realtime/calls", withAuthenticated(realtimeAuth, s.codexLiveHandler.Handle)...)
+	s.engine.GET("/v1/realtime/calls/:call_id", withAuthenticated(realtimeAuth, s.codexLiveHandler.HandleSideband)...)
+	s.engine.POST("/v1/realtime/client_secrets", withAuthenticated(standardAuth, s.codexLiveHandler.CreateClientSecret)...)
+	s.engine.POST("/v1/realtime/sessions", withAuthenticated(standardAuth, s.codexLiveHandler.CreateLegacySession)...)
+	s.engine.POST("/v1/realtime/transcription_sessions", withAuthenticated(standardAuth, s.codexLiveHandler.HandleTranscriptionSession)...)
+	s.engine.GET("/v1/realtime/translations", withAuthenticated(realtimeAuth, s.codexLiveHandler.HandleTranslation)...)
+	s.engine.POST("/v1/realtime/translations", withAuthenticated(realtimeAuth, s.codexLiveHandler.HandleTranslation)...)
+	s.engine.POST("/v1/realtime/translations/client_secrets", withAuthenticated(standardAuth, s.codexLiveHandler.HandleTranslation)...)
+	s.engine.POST("/v1/realtime/calls/:call_id/hangup", withAuthenticated(standardAuth, s.codexLiveHandler.HandleHangup)...)
+	s.engine.POST("/v1/realtime/calls/:call_id/accept", withAuthenticated(standardAuth, s.codexLiveHandler.HandleSIPControl)...)
+	s.engine.POST("/v1/realtime/calls/:call_id/reject", withAuthenticated(standardAuth, s.codexLiveHandler.HandleSIPControl)...)
+	s.engine.POST("/v1/realtime/calls/:call_id/refer", withAuthenticated(standardAuth, s.codexLiveHandler.HandleSIPControl)...)
 
 	openaiV1 := s.engine.Group("/openai/v1")
 	openaiV1.Use(AuthMiddleware(s.accessManager))
+	openaiV1.Use(s.authenticatedMiddleware...)
 	{
 		openaiV1.POST("/videos", openaiHandlers.VideosCreate)
 		openaiV1.GET("/videos/:video_id/content", openaiHandlers.VideosContent)
@@ -110,6 +118,7 @@ func (s *Server) setupRoutes() {
 	// Codex CLI direct route aliases (chatgpt_base_url compatible)
 	codexDirect := s.engine.Group("/backend-api/codex")
 	codexDirect.Use(AuthMiddleware(s.accessManager))
+	codexDirect.Use(s.authenticatedMiddleware...)
 	{
 		codexDirect.GET("/responses", openaiResponsesHandlers.ResponsesWebsocket)
 		codexDirect.POST("/responses", openaiResponsesHandlers.Responses)
@@ -120,6 +129,7 @@ func (s *Server) setupRoutes() {
 	// Gemini compatible API routes
 	v1beta := s.engine.Group("/v1beta")
 	v1beta.Use(AuthMiddleware(s.accessManager))
+	v1beta.Use(s.authenticatedMiddleware...)
 	{
 		v1beta.GET("/models", s.geminiModelsHandler(geminiHandlers))
 		v1beta.POST("/interactions", geminiHandlers.Interactions)
@@ -534,7 +544,10 @@ func (s *Server) AttachWebsocketRoute(path string, handler http.Handler) {
 		c.Abort()
 	}
 
-	s.engine.GET(trimmed, conditionalAuth, finalHandler)
+	handlers := []gin.HandlerFunc{conditionalAuth}
+	handlers = append(handlers, s.authenticatedMiddleware...)
+	handlers = append(handlers, finalHandler)
+	s.engine.GET(trimmed, handlers...)
 }
 
 // isAnthropicModelsRequest reports whether a /v1/models request should be served in

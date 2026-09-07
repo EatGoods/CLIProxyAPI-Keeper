@@ -122,6 +122,35 @@ func UpdateCPAAPIKeyAlias(db *gorm.DB, id int64, keyAlias string) error {
 	return nil
 }
 
+func UpdateCPAAPIKeyLimits(db *gorm.DB, id int64, limits entities.CPAAPIKeyLimits) error {
+	result := db.Model(&entities.CPAAPIKey{}).Where("id = ? AND is_deleted = ?", id, false).Updates(map[string]any{
+		"quota_limit_microusd":    limits.QuotaLimitMicrousd,
+		"rate_limit_enabled":      limits.RateLimitEnabled,
+		"rate_limit_5h_microusd":  limits.RateLimit5hMicrousd,
+		"rate_limit_day_microusd": limits.RateLimitDayMicrousd,
+		"rate_limit_7d_microusd":  limits.RateLimit7dMicrousd,
+		"expires_at":              limits.ExpiresAt,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func ResetCPAAPIKeyRateLimitUsage(db *gorm.DB, id int64, resetAt time.Time) error {
+	result := db.Model(&entities.CPAAPIKey{}).Where("id = ? AND is_deleted = ?", id, false).Update("rate_limit_reset_at", resetAt)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 // UpdateCPAAPIKeyLocalRankingProfile 在同一写事务中保存并回读 Key 的本地展示资料。
 func UpdateCPAAPIKeyLocalRankingProfile(db *gorm.DB, id int64, keyAlias string, avatarID uint8) (entities.CPAAPIKey, error) {
 	var row entities.CPAAPIKey
